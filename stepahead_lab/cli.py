@@ -13,6 +13,7 @@ from .strategy import evaluate_pair
 from .maker import assess_maker_candidate
 from .wallet import analyze_wallet, export_wallet
 from .activity import export_activity, profile_activity
+from .forensics import profile_windows
 from .monitor import snapshot as monitor_snapshot, watch as monitor_watch
 from .quality import audit_pages
 from .queue_replay import run_queue_replay
@@ -76,6 +77,10 @@ def build_parser() -> argparse.ArgumentParser:
     aexp.add_argument("--end", type=int, default=None, help="freeze at this UTC epoch")
     aexp.add_argument("--max-pages", type=int, default=5, help="0 = all pages")
     aexp.add_argument("--page-size", type=int, default=1000)
+    adeep = asub.add_parser("forensics", help="offline matched-pair costs and buy timing, NOT earned P&L")
+    adeep.add_argument("--data", type=Path, default=Path("data/activity"))
+    adeep.add_argument("--out", type=Path, default=Path("data/activity_forensics.json"))
+    adeep.add_argument("--top", type=int, default=15)
     arpt = asub.add_parser("analyze", help="activity types and non-PnL wallet inventory signals")
     arpt.add_argument("--data", type=Path, default=Path("data/activity"))
     arpt.add_argument("--out", type=Path, default=Path("data/activity_summary.json"))
@@ -155,6 +160,11 @@ def main(argv: list[str] | None = None) -> int:
             result = analyze_wallet(args.data)
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(json.dumps(result, indent=2), encoding="utf8")
+        elif args.command == "activity" and args.activity_command == "forensics":
+            result = profile_windows(args.data, top_n=args.top)
+            args.out.parent.mkdir(parents=True, exist_ok=True)
+            args.out.write_text(json.dumps(result, indent=2), encoding="utf8")
+            result = {k: v for k, v in result.items() if k != "per_window"}
         elif args.command == "activity" and args.activity_command == "analyze":
             result = profile_activity(args.data)
             args.out.parent.mkdir(parents=True, exist_ok=True)
