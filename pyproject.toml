@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stepahead-lab"
+version = "1.1.2"
+description = "Read-only StepAhead wallet forensics, BTC 5m paper-only scanning, settlement, monitoring, and dashboard"
+requires-python = ">=3.11"
+dependencies = ["requests>=2.31,<3"]
+
+[project.scripts]
+stepahead = "stepahead_lab.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["stepahead_lab*"]

@@ -1,0 +1,35 @@
+StepAhead Lab 1.1.2 — PAPER ONLY, ZERO LIVE ORDERS
+
+WINDOWS UPDATE:
+  1. Stop the old terminal with Ctrl+C.
+  2. Extract the v1.1.2 hotfix over the existing stepahead-lab folder.
+     Keep data/, .git/, .venv/ (they are not in the archive).
+  3. Run start.bat; ensure tests pass.
+  4. Run publish-to-github.bat; confirm it says PUBLISHED.
+     Git pager is disabled; local master is renamed to main if necessary.
+
+MAC NEW INSTALL (after Windows push succeeds):
+  1. Open Terminal.
+  2. mkdir -p ~/Documents && cd ~/Documents
+  3. git clone https://github.com/Wandersport/WS-StepAhead-Lab.git
+  4. cd WS-StepAhead-Lab
+  5. bash start.command
+
+MAC LATER UPDATES (stop monitor first):
+  cd ~/Documents/WS-StepAhead-Lab
+  git pull --ff-only
+  bash start.command
+
+Mac must have Git and Python 3.11+ installed; launch selects the newest
+supported python3.14/3.13/3.12/3.11/3 interpreter available.
+
+Existing Windows data/ is LOCAL and is intentionally ignored by Git.
+Copy data/ separately if you want historical monitoring state on the Mac.
+Never commit trading credentials, .env, .venv/, or research data.
+
+Dashboard: http://127.0.0.1:8765/ (only while process is running).
+The chart shows public-wallet P&L, not your returns. If the process stops,
+Firefox may say 'Connection interrupted'; this is expected until restart.
+
+NOTE: Real quotes with negative post-fee edge must NOT be treated as signals.
+This package does not prove profitability or authorize actual trading.
