@@ -98,3 +98,22 @@ Run `python -m unittest discover -s tests -v`. The tests use synthetic fixtures 
 - Official fee guide: <https://help.polymarket.com/en/articles/13364478-trading-fees>.
 
 **Not financial advice.** Observe Polymarket rules and jurisdiction restrictions before interacting with its services. No investment outcomes are guaranteed.
+
+
+## Offline StepAhead wallet forensics (optional, added October 28, 2026)
+
+When you have collected an activity sample, run in a SECOND Terminal while the 24-hour paper monitor continues:
+
+```bash
+cd ~/Documents/WS-StepAhead-Lab
+.venv/bin/stepahead audit --kind activity
+.venv/bin/stepahead activity forensics --top 10
+```
+
+The report is written to `data/activity_forensics.json` (ignored by Git). It computes per-five-minute-window buy quantities, weighted acquisition prices, FIFO-matched UP/DOWN pair cost, the first-to-opposite-side timing gap, gross **pre-fee** pair edge and unmatched inventory. It flags partial boundary windows, excludes records with SELL activity or malformed trades from buy-only scenario rankings, and never labels those estimates as actual profit.
+
+**Do not confuse this with a full StepAhead replica:** the matched-pair calculation ignores fees debited in shares, rebates, oracle settlement, unknown execution queue positions and any unobserved wallet cashflows. Wallet activity can show both sides purchased without their cost being below $1. The source may contain incomplete market windows at the beginning and end of a partial export.
+
+The first export is deliberately frozen to the original `end` timestamp. Resume it with `.venv/bin/stepahead activity export --max-pages 30` (or `--max-pages 0` for potentially lengthy exhaustion); do not change the start/end/page-size parameters for that directory. This export is public GET-only but competes for API rate limits and consumes local disk space. It is not necessary to exhaust the wallet's entire history before running a 24-hour prospective paper observation.
+
+**Mac run:** keep the Terminal open, the laptop connected to power and its lid open. Use `caffeinate -dimsu bash start.command` to prevent idle sleep. Leave the process and `data/` untouched until the prospective run is complete. Pushing GitHub source code never transfers the local history.
