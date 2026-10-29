@@ -148,7 +148,7 @@ def observe(client: PublicHTTP, *, polls: int, interval: float, quantity: D,
             min_edge_pct: D, buffer: D, directory: Path,
             confirmations: int = 2, max_total_paper_cost: D = D("1000"),
             max_market_paper_cost: D = D("100"),
-            verbose: bool = True) -> dict:
+            verbose: bool = True, stop_at_monotonic: float | None = None) -> dict:
     if interval < 0.5:
         raise ValueError("interval must be >= 0.5 seconds")
     if confirmations < 2:
@@ -170,6 +170,8 @@ def observe(client: PublicHTTP, *, polls: int, interval: float, quantity: D,
     recorded = 0
     errors = 0
     for iteration in range(polls):
+        if stop_at_monotonic is not None and time.monotonic() >= stop_at_monotonic:
+            break
         try:
             market = discover_current(client)
             up, down = fetch_pair(client, market)
@@ -178,6 +180,8 @@ def observe(client: PublicHTTP, *, polls: int, interval: float, quantity: D,
                                              buffer_per_leg=buffer)
             clock = getattr(client, "clock", None)
             clock_meta = clock.diagnostic() if clock is not None else None
+            if stop_at_monotonic is not None and time.monotonic() >= stop_at_monotonic:
+                break
             _append_jsonl(snaps, snapshot_record(market, up, down, quote, passive, clock_meta))
             observed += 1
             if quote.valid:
@@ -215,9 +219,13 @@ def observe(client: PublicHTTP, *, polls: int, interval: float, quantity: D,
             if verbose:
                 print(f"[{iteration + 1}/{polls}] public observation failed: {exc}", flush=True)
         if iteration + 1 < polls:
-            time.sleep(interval)
+            delay = interval if stop_at_monotonic is None else min(
+                interval, max(0., stop_at_monotonic - time.monotonic()))
+            if delay > 0:
+                time.sleep(delay)
     return {"mode": "PAPER_ONLY", "snapshots_recorded": observed,
             "new_hypothetical_pairs": recorded, "rejected_or_network_errors": errors,
             "cumulative_hypothetical_reserved_cost_usdc": str(spent),
             "snapshots_file": str(snaps), "paper_pairs_file": str(decisions),
-            "actually_executed_orders": 0}
+            "actually_executed_orders": 0,
+            "stop_reached": stop_at_monotonic is not None and time.monotonic() >= stop_at_monotonic}

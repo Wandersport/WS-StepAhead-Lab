@@ -2,7 +2,7 @@
 # macOS Apple silicon / Intel: run entirely locally, public-data paper mode.
 set -euo pipefail
 cd "$(dirname "$0")"
-printf '\n=== StepAhead Lab 1.1.2 — PAPER ONLY ===\n'
+printf '\n=== StepAhead Lab 1.1.3 — PAPER ONLY ===\n'
 PY=''
 for candidate in python3.14 python3.13 python3.12 python3.11 python3; do
   if command -v "$candidate" >/dev/null 2>&1 && \
@@ -23,4 +23,4 @@ fi
 .venv/bin/python -m pip install --disable-pip-version-check -e .
 .venv/bin/python -m unittest discover -s tests -q
 printf 'Dashboard: http://127.0.0.1:8765/\nPress Ctrl+C to stop.\n'
-exec .venv/bin/stepahead start
+exec .venv/bin/stepahead start "$@"

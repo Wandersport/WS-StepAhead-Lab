@@ -8,6 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from threading import Thread
 import time
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import TARGET_WALLET
 from .dashboard import make_server, serve_on
@@ -23,7 +25,8 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
         interval: float = 4.0, quantity: D = D('25'), min_edge_pct: D = D('0.2'),
         buffer: D = D('0.002'), port: int = 8765,
         dashboard: bool = True, wallet: str = TARGET_WALLET,
-        client: PublicHTTP | None = None) -> dict:
+        client: PublicHTTP | None = None, duration_hours: D | None = None,
+        stop_at_epoch: float | None = None) -> dict:
     """Run indefinitely when cycles=0, or a bounded number for smoke tests.
 
     Never silently places any order. Existing counterfactual paper budget persists.
@@ -34,6 +37,18 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
         raise ValueError('Invalid model configuration')
     if not (1024 <= port <= 65535):
         raise ValueError('Bad local dashboard port')
+    if duration_hours is not None and (not duration_hours.is_finite() or not D(0) < duration_hours <= D(168)):
+        raise ValueError('Duration must be positive, finite, and <= 168 hours')
+    if duration_hours is not None and stop_at_epoch is not None:
+        raise ValueError('Choose duration or absolute stop time, not both')
+    started_mono = time.monotonic()
+    started_wall = time.time()
+    if duration_hours is not None:
+        stop_at_epoch = started_wall + float(duration_hours) * 3600
+    if stop_at_epoch is not None and stop_at_epoch <= started_wall:
+        raise ValueError('Stop time must be in the future')
+    stop_mono = (started_mono + (stop_at_epoch - started_wall)
+                 if stop_at_epoch is not None else None)
     root.mkdir(parents=True, exist_ok=True)
     server = None
     if dashboard:
@@ -47,8 +62,18 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
     client = client or PublicHTTP()
     completed=0; errors=[]; total_snap=0; total_pairs=0
     print('StepAhead Lab service: public reads + paper hypotheses ONLY. Ctrl+C to stop.',flush=True)
+    if stop_at_epoch is not None:
+        try:
+            local_tz = ZoneInfo('Europe/Madrid')
+            zone_label = 'Europe/Madrid'
+        except ZoneInfoNotFoundError:  # Windows may lack the OS timezone database.
+            local_tz = timezone.utc
+            zone_label = 'UTC fallback (install tzdata for Madrid display)'
+        stop_display = datetime.fromtimestamp(stop_at_epoch, local_tz)
+        print('AUTOMATIC STOP scheduled for', stop_display.strftime('%Y-%m-%d %H:%M:%S %Z'),
+              '('+zone_label+'), mode PAPER_ONLY.', flush=True)
     last_clock_sync = None
-    while cycles==0 or completed<cycles:
+    while (cycles==0 or completed<cycles) and (stop_mono is None or time.monotonic()<stop_mono):
         if hasattr(client, 'ensure_clock'):
             try:
                 clock_report = client.ensure_clock()
@@ -65,7 +90,8 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
                 # The profile is still public but market decisions without
                 # venue time must not proceed in the same cycle.
                 completed += 1
-                time.sleep(max(5., interval))
+                time.sleep(min(max(5., interval), max(0., stop_mono-time.monotonic()))
+                           if stop_mono is not None else max(5., interval))
                 continue
         try:
             data = monitor_snapshot(client, root/'profile_snapshots.jsonl',wallet)
@@ -78,7 +104,7 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
         try:
             result=observe(client, polls=polls_per_cycle, interval=interval, quantity=quantity,
                            min_edge_pct=min_edge_pct, buffer=buffer,
-                           directory=root/'paper',verbose=True)
+                           directory=root/'paper',verbose=True, stop_at_monotonic=stop_mono)
             total_snap += result['snapshots_recorded']
             total_pairs += result['new_hypothetical_pairs']
         except (OSError,RuntimeError,ValueError) as exc:
@@ -93,7 +119,15 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
         completed+=1
         if cycles==0 and total_snap==0:
             # If API has been unreachable, be gentle rather than retrying in a hot loop.
-            time.sleep(max(5., interval))
+            time.sleep(min(max(5., interval), max(0., stop_mono-time.monotonic()))
+                       if stop_mono is not None else max(5., interval))
+    if server is not None:
+        server.shutdown()
+        server.server_close()
+    print('StepAhead service stopped. No live orders.', flush=True)
     return {'mode':'PAPER_ONLY','completed_cycles':completed,'public_book_snapshots':total_snap,
             'new_counterfactual_pairs':total_pairs,'errors':errors[-15:],
-            'real_orders':0,'dashboard':f'http://127.0.0.1:{port}/' if dashboard else None}
+            'real_orders':0,'dashboard':f'http://127.0.0.1:{port}/' if dashboard else None,
+            'stop_at_utc': datetime.fromtimestamp(stop_at_epoch, ZoneInfo('UTC')).isoformat()
+            if stop_at_epoch is not None else None,
+            'stop_reached': stop_mono is not None and time.monotonic() >= stop_mono}

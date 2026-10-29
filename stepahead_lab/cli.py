@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from .config import DATA_API, TARGET_WALLET
@@ -43,6 +44,19 @@ def _nonnegative_dec(s: str) -> D:
     except InvalidOperation:
         pass
     raise argparse.ArgumentTypeError("Expected finite nonnegative decimal")
+
+
+def _absolute_stop(s: str) -> float:
+    """Require an explicit timezone; reject ambiguous local wall times."""
+    try:
+        value = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Missing UTC offset")
+        return value.timestamp()
+    except (ValueError, OverflowError) as exc:
+        raise argparse.ArgumentTypeError(
+            "Use a timezone-aware ISO time, e.g. 2026-10-30T18:00:00+01:00"
+        ) from exc
 
 
 def _evaluate_args(parser: argparse.ArgumentParser) -> None:
@@ -140,6 +154,11 @@ def build_parser() -> argparse.ArgumentParser:
     service = sub.add_parser("start", help="one-command foreground paper monitor and local dashboard")
     service.add_argument("--data", type=Path, default=Path("data"))
     service.add_argument("--cycles", type=int, default=0, help="0 = run until Ctrl+C")
+    stopping = service.add_mutually_exclusive_group()
+    stopping.add_argument("--duration-hours", type=_positive_dec, default=None,
+                          help="automatically stop after this many hours, measured with monotonic time")
+    stopping.add_argument("--stop-at", type=_absolute_stop, default=None,
+                          help="stop at an ISO timestamp WITH UTC offset, e.g. 2026-10-30T18:00:00+01:00")
     service.add_argument("--polls-per-cycle", type=int, default=15)
     service.add_argument("--interval", type=float, default=4.)
     service.add_argument("--port", type=int, default=8765)
@@ -194,7 +213,8 @@ def main(argv: list[str] | None = None) -> int:
                                  polls_per_cycle=args.polls_per_cycle, interval=args.interval,
                                  quantity=args.quantity, min_edge_pct=args.min_edge_pct,
                                  buffer=args.buffer, port=args.port,
-                                 dashboard=not args.no_dashboard, wallet=args.wallet)
+                                 dashboard=not args.no_dashboard, wallet=args.wallet,
+                                 duration_hours=args.duration_hours, stop_at_epoch=args.stop_at)
         else:
             client = PublicHTTP()
             if args.command == "settle":
