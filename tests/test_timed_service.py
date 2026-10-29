@@ -5,6 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import time
 import unittest
+from unittest.mock import patch
 
 from stepahead_lab.cli import build_parser
 from stepahead_lab.paper import observe
@@ -51,7 +52,14 @@ class TimedServiceTests(unittest.TestCase):
 
     def test_short_run_stops_without_network(self):
         with TemporaryDirectory() as td:
-            result = run(root=Path(td), dashboard=False, duration_hours=Decimal("0.000000001"))
+            # Ensure no public network calls even if an OS scheduler enters the
+            # short-lived loop before the monotonic deadline has elapsed.
+            with patch("stepahead_lab.runner.monitor_snapshot", return_value={"snapshot": {}}), \
+                 patch("stepahead_lab.runner.observe", return_value={
+                     "snapshots_recorded": 0, "new_hypothetical_pairs": 0}), \
+                 patch("stepahead_lab.runner.settle_file", return_value={}):
+                result = run(root=Path(td), dashboard=False, client=object(),
+                             duration_hours=Decimal("0.000000001"))
             self.assertTrue(result["stop_reached"])
             self.assertEqual(result["real_orders"], 0)
             self.assertIsNotNone(result["stop_at_utc"])
