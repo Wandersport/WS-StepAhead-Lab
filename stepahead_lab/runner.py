@@ -128,6 +128,6 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
     return {'mode':'PAPER_ONLY','completed_cycles':completed,'public_book_snapshots':total_snap,
             'new_counterfactual_pairs':total_pairs,'errors':errors[-15:],
             'real_orders':0,'dashboard':f'http://127.0.0.1:{port}/' if dashboard else None,
-            'stop_at_utc': datetime.fromtimestamp(stop_at_epoch, ZoneInfo('UTC')).isoformat()
+            'stop_at_utc': datetime.fromtimestamp(stop_at_epoch, timezone.utc).isoformat()
             if stop_at_epoch is not None else None,
             'stop_reached': stop_mono is not None and time.monotonic() >= stop_mono}
