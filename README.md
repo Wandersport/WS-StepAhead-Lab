@@ -138,3 +138,7 @@ The terminal prints the automatic Madrid stop time. For an exact wall-clock dead
 An upcoming market must have a canonical Gamma event, a verified condition ID, unambiguous UP/DOWN token IDs and metadata consistent with its five-minute start/end. Missing or unlisted markets are recorded separately, rather than fabricated. All records include REST response times, book skew and book ages. This feature makes extra public GETs and may run more slowly than the original collector. It does not assume that early public book quotes were executed by StepAhead or by us.
 
 **Research standard:** do not tune a strategy using these snapshots and claim out-of-sample profit. Analyze the observed prewindow books alongside the wallet's public fill chronology; record fill assumptions, fees, rebates, queue priority and unavailable market coverage before building a paper execution model.
+
+### v1.2.1 Pre-window timestamp hardening
+
+The upcoming-market recorder now confirms that **both** books were received before the target comparison-window start. A market found before the start but fetched afterwards is recorded as `books_received_after_window_start` in `data/prewindow/status.jsonl`, never misclassified as a pre-window snapshot. `seconds_until_window_start` is calculated from the **later book receipt time**. Previously collected records are retained unchanged; reports should consider the new `book_observed_venue_epoch` field when comparing early quotes.
