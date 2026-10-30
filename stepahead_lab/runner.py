@@ -26,7 +26,9 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
         buffer: D = D('0.002'), port: int = 8765,
         dashboard: bool = True, wallet: str = TARGET_WALLET,
         client: PublicHTTP | None = None, duration_hours: D | None = None,
-        stop_at_epoch: float | None = None) -> dict:
+        stop_at_epoch: float | None = None,
+        capture_upcoming: bool = False, upcoming_windows: int = 2,
+        upcoming_every: int = 5) -> dict:
     """Run indefinitely when cycles=0, or a bounded number for smoke tests.
 
     Never silently places any order. Existing counterfactual paper budget persists.
@@ -37,6 +39,8 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
         raise ValueError('Invalid model configuration')
     if not (1024 <= port <= 65535):
         raise ValueError('Bad local dashboard port')
+    if not 1 <= upcoming_windows <= 3 or upcoming_every < 1:
+        raise ValueError('Invalid upcoming observation settings')
     if duration_hours is not None and (not duration_hours.is_finite() or not D(0) < duration_hours <= D(168)):
         raise ValueError('Duration must be positive, finite, and <= 168 hours')
     if duration_hours is not None and stop_at_epoch is not None:
@@ -60,7 +64,7 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
                                'or use --port to select another port.') from exc
         Thread(target=serve_on, args=(server,port), kwargs={'open_browser':True}, daemon=True).start()
     client = client or PublicHTTP()
-    completed=0; errors=[]; total_snap=0; total_pairs=0
+    completed=0; errors=[]; total_snap=0; total_pairs=0; total_upcoming=0; upcoming_errors=0
     print('StepAhead Lab service: public reads + paper hypotheses ONLY. Ctrl+C to stop.',flush=True)
     if stop_at_epoch is not None:
         try:
@@ -104,9 +108,13 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
         try:
             result=observe(client, polls=polls_per_cycle, interval=interval, quantity=quantity,
                            min_edge_pct=min_edge_pct, buffer=buffer,
-                           directory=root/'paper',verbose=True, stop_at_monotonic=stop_mono)
+                           directory=root/'paper',verbose=True, stop_at_monotonic=stop_mono,
+                           capture_upcoming=capture_upcoming, upcoming_windows=upcoming_windows,
+                           upcoming_every=upcoming_every)
             total_snap += result['snapshots_recorded']
             total_pairs += result['new_hypothetical_pairs']
+            total_upcoming += result.get('upcoming_snapshots_recorded', 0)
+            upcoming_errors += result.get('upcoming_recording_errors', 0)
         except (OSError,RuntimeError,ValueError) as exc:
             errors.append('paper: '+str(exc)[:200])
             print('Paper collector unavailable:',str(exc)[:200],flush=True)
@@ -126,7 +134,10 @@ def run(*, root: Path, cycles: int = 0, polls_per_cycle: int = 15,
         server.server_close()
     print('StepAhead service stopped. No live orders.', flush=True)
     return {'mode':'PAPER_ONLY','completed_cycles':completed,'public_book_snapshots':total_snap,
-            'new_counterfactual_pairs':total_pairs,'errors':errors[-15:],
+            'new_counterfactual_pairs':total_pairs,
+            'upcoming_snapshots':total_upcoming,
+            'upcoming_recorder_errors':upcoming_errors,
+            'errors':errors[-15:],
             'real_orders':0,'dashboard':f'http://127.0.0.1:{port}/' if dashboard else None,
             'stop_at_utc': datetime.fromtimestamp(stop_at_epoch, timezone.utc).isoformat()
             if stop_at_epoch is not None else None,

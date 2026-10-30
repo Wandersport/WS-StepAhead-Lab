@@ -31,7 +31,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px s
 <p class="warning">All local trade signals and settlements are counterfactual. Zero real executions; not a verified profitable clone. Displayed public wallet P&L is the target trader's, not yours.</p>
 <div class="cards"><div class="card"><small class="muted">Target reported cumulative P&L</small><div class="number" id="pnl">—</div></div><div class="card"><small class="muted">Target trading volume (USDC)</small><div class="number" id="vol">—</div></div><div class="card"><small class="muted">Book snapshots captured</small><div class="number" id="snaps">0</div></div><div class="card"><small class="muted">Hypothetical pairs logged</small><div class="number" id="pairs">0</div></div></div>
 <div class="section"><h2>Target P&L observations</h2><svg id="chart" class="chart" viewBox="0 0 800 150" preserveAspectRatio="none" role="img" aria-label="Target cumulative PNL chart"></svg><p class="muted" id="history">No observations yet.</p></div>
-<div class="section"><h2>Research status</h2><table><tbody><tr><th>Verified settlement outcomes</th><td id="settled">0</td></tr><tr><th>Unresolved paper markets</th><td id="pending">0</td></tr><tr><th>Stress-adjusted counterfactual P&L</th><td id="theory">—</td></tr><tr><th>Observed at</th><td id="time">—</td></tr><tr><th>Venue minus Windows clock</th><td id="clock">—</td></tr><tr><th>Last UP/DOWN venue event age</th><td id="ages">—</td></tr><tr><th>Last quote decision</th><td id="reason">—</td></tr><tr><th>Recent decision distribution</th><td id="reasons">—</td></tr></tbody></table></div>
+<div class="section"><h2>Research status</h2><table><tbody><tr><th>Verified settlement outcomes</th><td id="settled">0</td></tr><tr><th>Unresolved paper markets</th><td id="pending">0</td></tr><tr><th>Stress-adjusted counterfactual P&L</th><td id="theory">—</td></tr><tr><th>Observed at</th><td id="time">—</td></tr><tr><th>Venue minus Windows clock</th><td id="clock">—</td></tr><tr><th>Last UP/DOWN venue event age</th><td id="ages">—</td></tr><tr><th>Last quote decision</th><td id="reason">—</td></tr><tr><th>Upcoming-market snapshots captured</th><td id="upcoming">0</td></tr><tr><th>Recent decision distribution</th><td id="reasons">—</td></tr></tbody></table></div>
 <div class="muted">Local dashboard · refreshes every 15 seconds · public GET-only API collectors · read-only browser endpoints</div>
 <script>
 function set(id,value){document.getElementById(id).textContent=value}
@@ -40,7 +40,7 @@ async function refresh(){try{const r=await fetch('/api/status',{cache:'no-store'
 set('pnl',fmt(x.target_pnl));set('vol',fmt(x.target_volume));set('snaps',x.snapshot_count);set('pairs',x.paper_pair_count);set('settled',x.settled_count);set('pending',x.pending_count);set('theory',fmt(x.theoretical_settled_profit));set('time',x.latest_observed_utc||'—');
 set('clock',x.clock_offset_s===null||x.clock_offset_s===undefined?'—':Number(x.clock_offset_s).toFixed(2)+'s');
 set('ages',(x.last_book_ages?.up??'—')+'s / '+(x.last_book_ages?.down??'—')+'s');
-set('reason',x.last_decision||'—');
+set('reason',x.last_decision||'—');set('upcoming',x.upcoming_snapshot_count??0);
 set('reasons',Object.entries(x.recent_decisions||{}).sort((a,b)=>b[1]-a[1]).slice(0,5).map(p=>p[0]+' '+p[1]).join(' · ')||'—');
 const y=x.pnl_series||[]; const chart=document.getElementById('chart');chart.replaceChildren();
 if(y.length>1){let vals=y.map(v=>v[1]);let a=Math.min(...vals),b=Math.max(...vals);if(b===a)b+=1;
@@ -139,6 +139,7 @@ def summarize_data(root: Path) -> dict:
     snapshot_path = root/'paper'/'snapshots.jsonl'
     count_snap = _count_lines(snapshot_path)
     pair_count = _count_lines(root/'paper'/'paper_pairs.jsonl')
+    upcoming_count = _count_lines(root/'prewindow'/'snapshots.jsonl')
     recent = _tail(snapshot_path, 250)
     last_book = recent[-1] if recent else {}
     decision_counts = Counter(x.get('quote', {}).get('reason', 'unknown') for x in recent)
@@ -151,7 +152,8 @@ def summarize_data(root: Path) -> dict:
     records = state.get('settlements',{})
     if not isinstance(records,dict): records={}
     return {"target_pnl": _pnl(latest), "target_volume":latest.get('volume',{}).get('volume_usdc'),
-        "snapshot_count":count_snap,"paper_pair_count":pair_count,"settled_count":len(records),
+        "snapshot_count":count_snap,"paper_pair_count":pair_count,
+        "upcoming_snapshot_count":upcoming_count,"settled_count":len(records),
         "pending_count":max(0,pair_count-len(records)),
         "clock_offset_s":clock.get('offset_venue_minus_host_seconds'),
         "last_book_ages":last_ages,
