@@ -162,6 +162,11 @@ def build_parser() -> argparse.ArgumentParser:
     service.add_argument("--polls-per-cycle", type=int, default=15)
     service.add_argument("--interval", type=float, default=4.)
     service.add_argument("--port", type=int, default=8765)
+    service.add_argument("--capture-upcoming", action="store_true",
+                         help="record future-market order books separately; NOT trading signals")
+    service.add_argument("--upcoming-windows", type=int, default=2, choices=(1,2,3))
+    service.add_argument("--upcoming-every", type=int, default=5,
+                         help="capture upcoming books every N active-market polls")
     service.add_argument("--no-dashboard", action="store_true")
     service.add_argument("--wallet", default=TARGET_WALLET)
     _evaluate_args(service)
@@ -214,7 +219,10 @@ def main(argv: list[str] | None = None) -> int:
                                  quantity=args.quantity, min_edge_pct=args.min_edge_pct,
                                  buffer=args.buffer, port=args.port,
                                  dashboard=not args.no_dashboard, wallet=args.wallet,
-                                 duration_hours=args.duration_hours, stop_at_epoch=args.stop_at)
+                                 duration_hours=args.duration_hours, stop_at_epoch=args.stop_at,
+                                 capture_upcoming=args.capture_upcoming,
+                                 upcoming_windows=args.upcoming_windows,
+                                 upcoming_every=args.upcoming_every)
         else:
             client = PublicHTTP()
             if args.command == "settle":

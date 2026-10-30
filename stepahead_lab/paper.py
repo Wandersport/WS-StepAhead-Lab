@@ -148,13 +148,17 @@ def observe(client: PublicHTTP, *, polls: int, interval: float, quantity: D,
             min_edge_pct: D, buffer: D, directory: Path,
             confirmations: int = 2, max_total_paper_cost: D = D("1000"),
             max_market_paper_cost: D = D("100"),
-            verbose: bool = True, stop_at_monotonic: float | None = None) -> dict:
+            verbose: bool = True, stop_at_monotonic: float | None = None,
+            capture_upcoming: bool = False, upcoming_windows: int = 2,
+            upcoming_every: int = 5) -> dict:
     if interval < 0.5:
         raise ValueError("interval must be >= 0.5 seconds")
     if confirmations < 2:
         raise ValueError("confirmations must be >= 2 to reduce snapshot artifacts")
     if polls < 1:
         raise ValueError("polls must be positive")
+    if not 1 <= upcoming_windows <= 3 or upcoming_every < 1:
+        raise ValueError("Invalid upcoming observation settings")
     if max_total_paper_cost <= 0 or max_market_paper_cost <= 0:
         raise ValueError("Paper budgets must be positive")
     directory.mkdir(parents=True, exist_ok=True)
@@ -169,6 +173,8 @@ def observe(client: PublicHTTP, *, polls: int, interval: float, quantity: D,
     observed = 0
     recorded = 0
     errors = 0
+    upcoming_captured = 0
+    upcoming_failures = 0
     for iteration in range(polls):
         if stop_at_monotonic is not None and time.monotonic() >= stop_at_monotonic:
             break
@@ -218,6 +224,23 @@ def observe(client: PublicHTTP, *, polls: int, interval: float, quantity: D,
             previous_slug = ""
             if verbose:
                 print(f"[{iteration + 1}/{polls}] public observation failed: {exc}", flush=True)
+        if capture_upcoming and iteration % upcoming_every == 0 and (
+            stop_at_monotonic is None or time.monotonic() < stop_at_monotonic):
+            try:
+                # Import lazily: the historical paper engine is unchanged when
+                # capture_upcoming=False, and this recorder never posts orders.
+                from .prewindow import record_upcoming
+                result = record_upcoming(
+                    client, directory.parent / "prewindow",
+                    windows=upcoming_windows, stop_at_monotonic=stop_at_monotonic)
+                upcoming_captured += result["upcoming_snapshots"]
+            except (ValueError, OSError, RuntimeError) as exc:
+                upcoming_failures += 1
+                _append_jsonl(directory.parent / "prewindow" / "errors.jsonl", {
+                    "kind": "prewindow_read_error", "poll": iteration,
+                    "message": str(exc)[:300], "logged_at_epoch": time.time()})
+                if verbose:
+                    print(f"Upcoming-market recorder unavailable: {str(exc)[:160]}", flush=True)
         if iteration + 1 < polls:
             delay = interval if stop_at_monotonic is None else min(
                 interval, max(0., stop_at_monotonic - time.monotonic()))
@@ -228,4 +251,6 @@ def observe(client: PublicHTTP, *, polls: int, interval: float, quantity: D,
             "cumulative_hypothetical_reserved_cost_usdc": str(spent),
             "snapshots_file": str(snaps), "paper_pairs_file": str(decisions),
             "actually_executed_orders": 0,
+            "upcoming_snapshots_recorded": upcoming_captured,
+            "upcoming_recording_errors": upcoming_failures,
             "stop_reached": stop_at_monotonic is not None and time.monotonic() >= stop_at_monotonic}
