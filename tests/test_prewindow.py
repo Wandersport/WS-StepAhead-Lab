@@ -50,9 +50,10 @@ class PrewindowTests(unittest.TestCase):
     def test_records_two_future_books_zero_fills(self):
         with TemporaryDirectory() as td:
             client=API(swapped=True)
-            r=record_upcoming(client,td,windows=2)
+            future_root = Path(td) / "prewindow"
+            r=record_upcoming(client,future_root,windows=2)
             self.assertEqual(r["upcoming_snapshots"],2)
-            rows=[json.loads(x) for x in (Path(td)/"snapshots.jsonl").read_text().splitlines()]
+            rows=[json.loads(x) for x in (future_root/"snapshots.jsonl").read_text().splitlines()]
             self.assertEqual(len(rows),2)
             self.assertEqual([round(x["seconds_until_window_start"]) for x in rows],[190,490])
             self.assertEqual(rows[0]["market"]["up_token"],"111")
