@@ -70,11 +70,26 @@ def record_upcoming(client, directory: str | Path, *,
         if stop_at_monotonic is not None and time.monotonic() >= stop_at_monotonic:
             skipped_deadline += 1
             break
+        # Discovery can finish before the start even if fetching the two
+        # REST books crosses the five-minute boundary. Only receipt timestamps
+        # from the calibrated venue clock establish pre-window observation.
+        observed_epoch = max(up.observed_at, down.observed_at)
+        if not observed_epoch < market.start:
+            _append_jsonl(root / "status.jsonl", {
+                "kind": "prewindow_discovery_status", "slug": slug,
+                "observed_venue_epoch": observed_epoch,
+                "reason": "books_received_after_window_start",
+                "matching_markets": len(candidate),
+            })
+            missing += 1
+            continue
         a, b = (up.asks[0] if up.asks else None,
                 down.asks[0] if down.asks else None)
         record = {
             "kind": "prewindow_book_snapshot", "market": asdict(market),
-            "venue_epoch_on_discovery": now, "seconds_until_window_start": market.start - now,
+            "venue_epoch_on_discovery": now,
+            "book_observed_venue_epoch": observed_epoch,
+            "seconds_until_window_start": market.start - observed_epoch,
             "up": asdict(up), "down": asdict(down),
             "up_best_ask": str(a.price) if a else None,
             "down_best_ask": str(b.price) if b else None,

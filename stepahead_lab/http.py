@@ -22,7 +22,7 @@ class PublicHTTP:
     def __init__(self, session: requests.Session | None = None, timeout: float = 12,
                  min_interval: float = 0.12, attempts: int = 4):
         self.session = session or requests.Session()
-        self.session.headers.update({"User-Agent": "StepAheadLab/1.1.1 public-research-readonly",
+        self.session.headers.update({"User-Agent": "StepAheadLab/1.2.1 public-research-readonly",
                                      "Accept": "application/json"})
         self.timeout = timeout
         self.min_interval = min_interval

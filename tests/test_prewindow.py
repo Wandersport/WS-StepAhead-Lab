@@ -12,6 +12,7 @@ from stepahead_lab.prewindow import record_upcoming
 from stepahead_lab.cli import build_parser
 from stepahead_lab.dashboard import summarize_data
 from stepahead_lab.paper import observe
+from stepahead_lab.markets import Book, Level
 
 START = 1800000000
 
@@ -62,6 +63,33 @@ class PrewindowTests(unittest.TestCase):
             self.assertEqual(rows[0]["up_best_ask"],"0.55")
             self.assertEqual(summarize_data(Path(td))["upcoming_snapshot_count"],2)
             self.assertTrue(all("/order" not in u for u,_ in client.calls))
+
+
+    def test_receipt_crosses_start_is_not_pre_window(self):
+        with TemporaryDirectory() as td:
+            t = START + 300
+            # Gamma discovery was pre-window, but the CLOB pair arrived late.
+            up = Book("111", (), (Level(Decimal("0.55"), Decimal("50")),), t-1, t+1, t+1)
+            down = Book("222", (), (Level(Decimal("0.55"), Decimal("50")),), t-1, t+1, t+1)
+            with patch("stepahead_lab.prewindow.fetch_pair", return_value=(up, down)):
+                result = record_upcoming(API(), td, windows=1)
+            self.assertEqual(result["upcoming_snapshots"], 0)
+            self.assertEqual(result["missing_or_ambiguous_markets"], 1)
+            self.assertFalse((Path(td) / "snapshots.jsonl").exists())
+            reason = json.loads((Path(td) / "status.jsonl").read_text().splitlines()[0])["reason"]
+            self.assertEqual(reason, "books_received_after_window_start")
+
+    def test_seconds_until_start_uses_actual_book_receipt_time(self):
+        with TemporaryDirectory() as td:
+            received = START + 150
+            up = Book("111", (), (Level(Decimal("0.55"), Decimal("50")),), received-1, received, received)
+            down = Book("222", (), (Level(Decimal("0.55"), Decimal("50")),), received-1, received, received)
+            with patch("stepahead_lab.prewindow.fetch_pair", return_value=(up, down)):
+                result = record_upcoming(API(), td, windows=1)
+            self.assertEqual(result["upcoming_snapshots"], 1)
+            row = json.loads((Path(td) / "snapshots.jsonl").read_text().splitlines()[0])
+            self.assertEqual(row["seconds_until_window_start"], 150)
+            self.assertEqual(row["book_observed_venue_epoch"], received)
 
     def test_unlisted_separate_from_empty_book(self):
         with TemporaryDirectory() as td:
