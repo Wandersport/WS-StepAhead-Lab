@@ -127,13 +127,13 @@ To run for a fixed 24 hours on your Mac, use `caffeinate -dimsu bash start.comma
 
 The first two 24-hour runs found zero qualifying simultaneous two-ask paper pairs, while the public wallet frequently bought both sides and often entered before the comparison window. The next collector observes the **next two listed BTC five-minute markets** before their event start, in addition to the existing current-window paper scanner:
 
-\`\`\`bash
+```bash
 cd ~/Documents/WS-StepAhead-Lab
 caffeinate -dimsu bash start.command --duration-hours 24 \
   --capture-upcoming --upcoming-windows 2 --upcoming-every 5
-\`\`\`
+```
 
-The terminal prints the automatic Madrid stop time. For an exact wall-clock deadline, replace \`--duration-hours 24\` with a timezone-aware \`--stop-at\` argument. No live orders are possible. New evidence goes to ignored local files \`data/prewindow/snapshots.jsonl\`, \`data/prewindow/status.jsonl\` and \`data/prewindow/errors.jsonl\`, preserving earlier \`data/paper/\` snapshots. The dashboard exposes only the number of upcoming snapshots captured; these are NOT simulated trades, modeled fills or profit.
+The terminal prints the automatic Madrid stop time. For an exact wall-clock deadline, replace `--duration-hours 24` with a timezone-aware `--stop-at` argument. No live orders are possible. New evidence goes to ignored local files `data/prewindow/snapshots.jsonl`, `data/prewindow/status.jsonl` and `data/prewindow/errors.jsonl`, preserving earlier `data/paper/` snapshots. The dashboard exposes only the number of upcoming snapshots captured; these are NOT simulated trades, modeled fills or profit.
 
 An upcoming market must have a canonical Gamma event, a verified condition ID, unambiguous UP/DOWN token IDs and metadata consistent with its five-minute start/end. Missing or unlisted markets are recorded separately, rather than fabricated. All records include REST response times, book skew and book ages. This feature makes extra public GETs and may run more slowly than the original collector. It does not assume that early public book quotes were executed by StepAhead or by us.
 
